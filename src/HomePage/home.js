@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Image, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Image, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ListClasseur } from '../../Services/AuthServices';
 import { useNavigation } from '@react-navigation/native';
@@ -25,7 +25,7 @@ const Home = () => {
       const data = await ListClasseur(clp_structure);
 
       if (data && data.classeur) {
-        console.log('Données des classeurs reçues:', data.classeur); 
+        console.log('Données des classeurs reçues:', data.classeur);
         setClasseurs(data.classeur);
       } else {
         console.log('Pas de classeurs dans les données reçues.');
@@ -46,11 +46,11 @@ const Home = () => {
   const calculateGlobalStats = () => {
     const totalClasseurs = classeurs.length;
     let totalFeuilles = 0;
-  
+
     classeurs.forEach(classeur => {
       totalFeuilles += parseInt(classeur['Nombre feuille']) || 0;
     });
-  
+
     return {
       totalClasseurs,
       totalFeuilles,
@@ -58,6 +58,39 @@ const Home = () => {
   };
 
   const globalStats = calculateGlobalStats();
+
+  const checkLocalData = async () => {
+    const localData = await AsyncStorage.getItem('localData');
+    return localData !== null;
+  };
+
+  const handleLogout = async () => {
+    Alert.alert(
+      'Confirmation de déconnexion',
+      'Vous allez perdre toutes les données enregistrées localement. Voulez-vous vraiment vous déconnecter ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Oui', onPress: async () => {
+            const hasLocalData = await checkLocalData();
+            if (hasLocalData) {
+              Alert.alert(
+                'Données non envoyées',
+                'Vous avez des données locales non envoyées. Veuillez les envoyer ou les supprimer avant de vous déconnecter.',
+                [{ text: 'OK' }]
+              );
+              return;
+            }
+            try {
+              await AsyncStorage.clear();
+              navigation.replace('LoginPage');
+            } catch (error) {
+              console.error('Erreur lors de la déconnexion:', error);
+            }
+          }
+        }
+      ]
+    );
+  };
 
   if (loading) {
     return (
@@ -69,10 +102,10 @@ const Home = () => {
 
   return (
     <View style={styles.container}>
-    <View style={styles.greetingContainer}>
-      <Text style={styles.greeting}>Bonjour : {userInfo.clp_nom} {userInfo.clp_prenom}</Text>
-      <MaterialIcons name="logout" size={24} color="black" style={styles.logoutIcon} />
-    </View>
+      <View style={styles.greetingContainer}>
+        <Text style={styles.greeting}>Bonjour : {userInfo.clp_nom} {userInfo.clp_prenom}</Text>
+        <MaterialIcons name="logout" size={24} color="black" style={styles.logoutIcon} onPress={handleLogout} />
+      </View>
 
       <View style={styles.walletContainer}>
         <View style={styles.contentContainer}>
@@ -87,7 +120,7 @@ const Home = () => {
           </View>
         </View>
       </View>
-      <View style={styles.classeurContainer}>
+      <TouchableOpacity style={styles.classeurContainer}  onPress={() => navigation.navigate('HomePage')}>
         <Text style={styles.classeurTitle}>Liste des classeurs</Text>
         <View style={styles.classeurContent}>
           <Image source={require('../../assets/logo/classeur-image.png')} style={styles.classeurImage} />
@@ -95,29 +128,20 @@ const Home = () => {
             <Text style={styles.arrowText}>→</Text>
           </TouchableOpacity>
         </View>
-      </View>
-      {/* <ScrollView contentContainerStyle={styles.feuillesContainer}>
+      </TouchableOpacity>
+      <ScrollView>
         {classeurs.map((classeur, index) => (
-          <View key={index} style={styles.feuilleItem}>
-            <Text style={styles.feuilleText}>{classeur['Libelle classeur']}</Text>
-          </View>
+          <TouchableOpacity key={index} style={styles.feuilleContainer}>
+            <View style={styles.iconContainer}>
+              <Text style={styles.icon}>📄</Text>
+            </View>
+            <View style={styles.feuilleContent}>
+              <Text style={styles.libelleFeuille}>{classeur['Libelle classeur']}</Text>
+              <Text style={styles.dateInsertion}>Date: {classeur['Date']}</Text>
+            </View>
+          </TouchableOpacity>
         ))}
-      </ScrollView> */}
-
-    <ScrollView>
-    <TouchableOpacity
-      style={styles.feuilleContainer}
-      onPress={() => navigateToFeuilleDetail(item)}
-    >
-      <View style={styles.iconContainer}>
-        <Text style={styles.icon}>📄</Text> 
-      </View>
-      <View style={styles.feuilleContent}>
-        <Text style={styles.libelleFeuille}>nom du feuille</Text>
-        <Text style={styles.dateInsertion}>date du feuille</Text>
-      </View>
-    </TouchableOpacity>
-    </ScrollView>
+      </ScrollView>
     </View>
   );
 };
@@ -146,12 +170,6 @@ const styles = StyleSheet.create({
   logoutIcon: {
     marginLeft: 10, 
   },
-  // greeting: {
-  //   fontSize: 18,
-  //   fontWeight: 'bold',
-  //   marginBottom: 10,
-  //   marginTop: 50,
-  // },
   walletContainer: {
     backgroundColor: '#009960',
     padding: 20,
@@ -219,21 +237,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
-  feuillesContainer: {
-    paddingBottom: 16,
-  },
-  feuilleItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    backgroundColor: '#F1F1F1',
-    marginBottom: 5,
-  },
-  feuilleText: {
-    flex: 1,
-  },
-
-
   feuilleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -263,10 +266,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 4,
-  },
-  nomFeuille: {
-    fontSize: 14,
-    marginBottom: 2,
   },
   dateInsertion: {
     fontSize: 12,

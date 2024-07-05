@@ -20,46 +20,36 @@ const HomePage = () => {
     setSearchText(text);
   };
 
-  const handleLogout = async () => {
-    try {
-      await AsyncStorage.clear();
-      navigation.replace('LoginPage');
-    } catch (error) {
-      console.error('Erreur lors de la déconnexion:', error);
-    }
-  };
-
   const fetchData = async () => {
-    const netInfo = await NetInfo.fetch();
-    if (!netInfo.isConnected) {
-      Toast.show({
-        type: 'error',
-        text1: 'Connexion perdue',
-        text2: 'Vous êtes hors connexion.',
-      });
-
-      setTimeout(() => {
-        Toast.hide();
-      }, 3000);
-    }
-
     try {
-      const clp_structure = await AsyncStorage.getItem('clp_structure');
-      if (!clp_structure) {
-        throw new Error('clp_structure non trouvé dans AsyncStorage');
+      const storedClasseurs = await AsyncStorage.getItem('classeurs');
+      if (storedClasseurs) {
+        setClasseurs(JSON.parse(storedClasseurs));
       }
 
+      const netInfo = await NetInfo.fetch();
       if (netInfo.isConnected) {
+        const clp_structure = await AsyncStorage.getItem('clp_structure');
+        if (!clp_structure) {
+          throw new Error('clp_structure non trouvé dans AsyncStorage');
+        }
+
         const data = await ListClasseur(clp_structure);
         if (data && data.classeur) {
           setClasseurs(data.classeur);
           await AsyncStorage.setItem('classeurs', JSON.stringify(data.classeur));
+          Toast.show({
+            type: 'success',
+            text1: 'Données mises à jour',
+            text2: 'Les données ont été synchronisées depuis le serveur.',
+          });
         }
       } else {
-        const storedClasseurs = await AsyncStorage.getItem('classeurs');
-        if (storedClasseurs) {
-          setClasseurs(JSON.parse(storedClasseurs));
-        }
+        Toast.show({
+          type: 'error',
+          text1: 'Connexion perdue',
+          text2: 'Vous êtes hors connexion.',
+        });
       }
     } catch (error) {
       console.error('Erreur lors de la récupération des classeurs:', error);
@@ -137,9 +127,6 @@ const HomePage = () => {
           value={searchText}
         />
       </View>
-      <TouchableOpacity style={styles.button} onPress={handleLogout}>
-        <Text style={styles.buttonText}>Déconnexion</Text>
-      </TouchableOpacity>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         {renderClasseurs()}
       </ScrollView>

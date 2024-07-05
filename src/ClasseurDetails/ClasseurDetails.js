@@ -11,69 +11,45 @@ const ClasseurDetails = ({ route }) => {
   const navigation = useNavigation();
   const [feuilles, setFeuilles] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isConnected, setIsConnected] = useState(false);
 
-  useEffect(() => {
-    const storeClasseurDetails = async () => {
-      try {
-        await AsyncStorage.setItem(`classeur_${classeur['Id']}`, JSON.stringify(classeur));
-      } catch (error) {
-        console.error('Erreur lors du stockage des détails du classeur:', error);
-      }
-    };
-
-    const fetchFeuilles = async () => {
-      try {
-        setLoading(true);
-        const clp_structure = await AsyncStorage.getItem('clp_structure');
-        const response = await getFeuille(classeur['Id'], clp_structure);
-        console.log('Réponse des feuilles:', response);
-        if (response && response.classeur) {
-          setFeuilles(response.classeur);
-          await AsyncStorage.setItem(`feuilles_${classeur['Id']}`, JSON.stringify(response.classeur));
-        }
-      } catch (error) {
-        console.error('Erreur lors de la récupération des feuilles:', error);
-      } finally {
+  const fetchData = async () => {
+    const netInfo = await NetInfo.fetch();
+    if (!netInfo.isConnected) {
+      const storedFeuilles = await AsyncStorage.getItem(`feuilles_${classeur['Id']}`);
+      if (storedFeuilles) {
+        setFeuilles(JSON.parse(storedFeuilles));
         setLoading(false);
-      }
-    };
-
-    const loadLocalData = async () => {
-      try {
-        const storedFeuilles = await AsyncStorage.getItem(`feuilles_${classeur['Id']}`);
-        if (storedFeuilles) {
-          setFeuilles(JSON.parse(storedFeuilles));
-        }
-      } catch (error) {
-        console.error('Erreur lors du chargement des données locales:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    const handleConnectivityChange = (state) => {
-      setIsConnected(state.isConnected);
-      if (!state.isConnected) {
+      } else {
         // Toast.show({
         //   type: 'error',
         //   text1: 'Connexion perdue',
-        //   text2: 'Vous êtes hors connexion. Les données peuvent ne pas être à jour.'
+        //   text2: 'Aucune donnée locale trouvée.',
         // });
-      } else {
-        fetchFeuilles();
+        setLoading(false);
       }
-    };
+      return;
+    }
 
-    storeClasseurDetails();
-    NetInfo.fetch().then(handleConnectivityChange);
-    const unsubscribe = NetInfo.addEventListener(handleConnectivityChange);
+    try {
+      const clp_structure = await AsyncStorage.getItem('clp_structure');
+      if (!clp_structure) {
+        throw new Error('clp_structure non trouvé dans AsyncStorage');
+      }
 
-    loadLocalData();
+      const response = await getFeuille(classeur['Id'], clp_structure);
+      if (response && response.classeur) {
+        setFeuilles(response.classeur);
+        await AsyncStorage.setItem(`feuilles_${classeur['Id']}`, JSON.stringify(response.classeur));
+      }
+    } catch (error) {
+      console.error('Erreur lors de la récupération des feuilles:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    return () => {
-      unsubscribe();
-    };
+  useEffect(() => {
+    fetchData();
   }, [classeur]);
 
   const navigateToFeuilleDetail = (feuille) => {
@@ -106,7 +82,7 @@ const ClasseurDetails = ({ route }) => {
   return (
     <View style={styles.container}>
       {feuilles.length === 0 ? (
-        <Text>Aucune feuille disponible pour ce classeur</Text>
+        <Text style={{ textAlign: 'center' }}>Aucune feuille disponible pour ce classeur</Text>
       ) : (
         <FlatList
           data={feuilles}
@@ -118,6 +94,7 @@ const ClasseurDetails = ({ route }) => {
     </View>
   );
 };
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -181,4 +158,3 @@ const styles = StyleSheet.create({
 });
 
 export default ClasseurDetails;
-
