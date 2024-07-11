@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, TextInput, Dimensions } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import Toast from 'react-native-toast-message';
@@ -15,6 +15,8 @@ const HomePage = () => {
   const [isLargeScreen, setIsLargeScreen] = useState(false);
 
   const navigation = useNavigation();
+  const route = useRoute();
+  const { code_projet } = route.params; 
 
   const handleSearch = (text) => {
     setSearchText(text);
@@ -29,12 +31,12 @@ const HomePage = () => {
 
       const netInfo = await NetInfo.fetch();
       if (netInfo.isConnected) {
-        const clp_structure = await AsyncStorage.getItem('clp_structure');
-        if (!clp_structure) {
-          throw new Error('clp_structure non trouvé dans AsyncStorage');
+        if (!code_projet) {
+          throw new Error('Code du projet non trouvé');
         }
 
-        const data = await ListClasseur(clp_structure);
+        const clp_structure = await AsyncStorage.getItem('clp_structure');
+        const data = await ListClasseur(clp_structure, code_projet);  // Utiliser le code du projet pour obtenir les classeurs
         if (data && data.classeur) {
           setClasseurs(data.classeur);
           await AsyncStorage.setItem('classeurs', JSON.stringify(data.classeur));
@@ -65,7 +67,7 @@ const HomePage = () => {
   useEffect(() => {
     const updateLayout = () => {
       const { width } = Dimensions.get('window');
-      setIsLargeScreen(width >= 450);
+      setIsLargeScreen(width >= 420);
     };
 
     Dimensions.addEventListener('change', updateLayout);
@@ -127,7 +129,9 @@ const HomePage = () => {
           value={searchText}
         />
       </View>
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <ScrollView contentContainerStyle={styles.scrollContainer}
+      showsVerticalScrollIndicator={false}
+      >
         {renderClasseurs()}
       </ScrollView>
     </View>

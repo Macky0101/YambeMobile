@@ -7,7 +7,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import Toast from 'react-native-toast-message';
 import axios from 'axios';
 import NetInfo from '@react-native-community/netinfo';
-
+import {sendDataToServer} from '../../Services/AuthServices';
 
 const columnMapping = {
   col0: 'Region',
@@ -161,106 +161,154 @@ const SavedDataScreen = () => {
 
     fetchClpNom();
   }, []);
-
-  const sendData = async () => {
-    const netInfo = await NetInfo.fetch();
-    if (!netInfo.isConnected) {
-      Alert.alert('Erreur', 'Aucune connexion Internet. Veuillez réessayer plus tard.');
-      return;
-    }
-
-    if (!locationEnabled) {
-      Alert.alert('Erreur', 'Veuillez activer votre position avant d\'envoyer les données.');
-      return;
-    }
-
-    setLoading(true);
-    setProgress(0);
-
-    const { coords: { latitude, longitude } } = location;
-    const totalItems = savedData.length;
-
-    for (let i = 0; i < totalItems; i++) {
-      try {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        const { id, codeFeuille, ...item } = savedData[i];
-        const tableName = await AsyncStorage.getItem(`Table_${codeFeuille}`);
-        const dateData = await AsyncStorage.getItem(`dateData-${id}`);
-        const date = dateData ? new Date(JSON.parse(dateData).date) : null;
-
-        if (!tableName) {
-          Alert.alert('Erreur', `Le nom de la table pour Code_Feuille ${codeFeuille} n'a pas pu être récupéré.`);
-          setLoading(false);
-          return;
-        }
-
-        const formData = new FormData();
-        formData.append('Table_Feuille', tableName);
-        formData.append('Login', clpNom);
-        formData.append('LG', longitude.toString());
-        formData.append('LT', latitude.toString());
-
-        // Ajouter les colonnes dynamiques et leurs valeurs
-        const columnsToInclude = Object.keys(item).filter(key => key !== 'id' && key !== 'codeFeuille');
-        columnsToInclude.forEach(col => {
-          formData.append(`Colonne[]`, col);
-          formData.append(`Values[]`, item[col]);
-          formData.append(`Type[]`, typeof item[col]);
-        });
-
-        // Ajouter la date formatée si elle est disponible
-        if (date) {
-          const formattedDate = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}`;
-          formData.append('Date_Insertion', formattedDate);
-        }
-
-        console.log('Données à envoyer :', formData);
-
-        const response = await axios.post('https://demo-swedd.org/api/InsertionFormulaire.php', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
-        });
-
-        console.log('Réponse de l\'API :', response.data);
-
-        if (response.status === 200 && !response.data.error) {
-          deleteItem(i);
-
-          Toast.show({
-            type: 'success',
-            text1: 'Succès',
-            text2: 'Les données ont été envoyées avec succès.'
-          });
-        } else {
-          throw new Error(response.data.error || 'Erreur lors de l\'envoi des données');
-        }
-
-        setProgress(((i + 1) / totalItems) * 100);
-      } catch (error) {
-        console.error('Erreur lors de l\'envoi des données :', error);
-
-        Alert.alert(
-          'Erreur',
-          error.message || 'Une erreur est survenue lors de l\'envoi des données. Veuillez réessayer plus tard.',
-          [{ text: 'OK' }]
-        );
-
-        Toast.show({
-          type: 'error',
-          text1: 'Erreur',
-          text2: 'Erreur lors de l\'envoi des données. Veuillez réessayer plus tard.'
-        });
-
-        setLoading(false);
-        return;
-      }
-    }
-
-    setLoading(false);
-    setAllDataSent(true);
+  /////////////////////////
+  const checkInternetConnection = async () => {
+    const state = await NetInfo.fetch();
+    return state.isConnected;
   };
+  const sendData = async () => {
+    try {
+      const isConnected = await checkInternetConnection();
+      if (!isConnected) {
+        throw new Error('Faible connexion Internet. Veuillez réessayer plus tard.');
+      }
+
+      setLoading(true);
+      setProgress(0);
+
+      await sendDataToServer(savedData, location, clpNom, setProgress);
+
+      Toast.show({
+        type: 'success',
+        text1: 'Succès',
+        text2: 'Les données ont été envoyées avec succès.'
+      });
+
+      setAllDataSent(true);
+
+      // Supprimer les éléments envoyés avec succès
+      const data = await AsyncStorage.getItem('savedFormData');
+      const parsedData = data ? JSON.parse(data) : [];
+      const remainingData = parsedData.filter(item => !savedData.includes(item));
+      await AsyncStorage.setItem('savedFormData', JSON.stringify(remainingData));
+      setSavedData([]);
+    } catch (error) {
+      console.error('Erreur lors de l\'envoi des données :', error);
+
+      Alert.alert(
+        'Erreur',
+        error.message || 'Une erreur est survenue lors de l\'envoi des données. Veuillez réessayer plus tard.',
+        [{ text: 'OK' }]
+      );
+
+      Toast.show({
+        type: 'error',
+        text1: 'Erreur',
+        text2: 'Erreur lors de l\'envoi des données. Veuillez réessayer plus tard.'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+  // const sendData = async () => {
+  //   const netInfo = await NetInfo.fetch();
+  //   if (!netInfo.isConnected) {
+  //     Alert.alert('Erreur', 'Aucune connexion Internet. Veuillez réessayer plus tard.');
+  //     return;
+  //   }
+
+  //   if (!locationEnabled) {
+  //     Alert.alert('Erreur', 'Veuillez activer votre position avant d\'envoyer les données.');
+  //     return;
+  //   }
+
+  //   setLoading(true);
+  //   setProgress(0);
+
+  //   const { coords: { latitude, longitude } } = location;
+  //   const totalItems = savedData.length;
+
+  //   for (let i = 0; i < totalItems; i++) {
+  //     try {
+  //       await new Promise(resolve => setTimeout(resolve, 1000));
+
+  //       const { id, codeFeuille, ...item } = savedData[i];
+  //       const tableName = await AsyncStorage.getItem(`Table_${codeFeuille}`);
+  //       const dateData = await AsyncStorage.getItem(`dateData-${id}`);
+  //       const date = dateData ? new Date(JSON.parse(dateData).date) : null;
+
+  //       if (!tableName) {
+  //         Alert.alert('Erreur', `Le nom de la table pour Code_Feuille ${codeFeuille} n'a pas pu être récupéré.`);
+  //         setLoading(false);
+  //         return;
+  //       }
+
+  //       const formData = new FormData();
+  //       formData.append('Table_Feuille', tableName);
+  //       formData.append('Login', clpNom);
+  //       formData.append('LG', longitude.toString());
+  //       formData.append('LT', latitude.toString());
+
+  //       // Ajouter les colonnes dynamiques et leurs valeurs
+  //       const columnsToInclude = Object.keys(item).filter(key => key !== 'id' && key !== 'codeFeuille');
+  //       columnsToInclude.forEach(col => {
+  //         formData.append(`Colonne[]`, col);
+  //         formData.append(`Values[]`, item[col]);
+  //         formData.append(`Type[]`, typeof item[col]);
+  //       });
+
+  //       // Ajouter la date formatée si elle est disponible
+  //       if (date) {
+  //         const formattedDate = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}`;
+  //         formData.append('Date_Insertion', formattedDate);
+  //       }
+
+  //       console.log('Données à envoyer :', formData);
+
+  //       const response = await axios.post('https://demo-swedd.org/api/InsertionFormulaire.php', formData, {
+  //         headers: {
+  //           'Content-Type': 'multipart/form-data'
+  //         }
+  //       });
+
+  //       console.log('Réponse de l\'API :', response.data);
+
+  //       if (response.status === 200 && !response.data.error) {
+  //         deleteItem(i);
+
+  //         Toast.show({
+  //           type: 'success',
+  //           text1: 'Succès',
+  //           text2: 'Les données ont été envoyées avec succès.'
+  //         });
+  //       } else {
+  //         throw new Error(response.data.error || 'Erreur lors de l\'envoi des données');
+  //       }
+
+  //       setProgress(((i + 1) / totalItems) * 100);
+  //     } catch (error) {
+  //       console.error('Erreur lors de l\'envoi des données :', error);
+
+  //       Alert.alert(
+  //         'Erreur',
+  //         error.message || 'Une erreur est survenue lors de l\'envoi des données. Veuillez réessayer plus tard.',
+  //         [{ text: 'OK' }]
+  //       );
+
+  //       Toast.show({
+  //         type: 'error',
+  //         text1: 'Erreur',
+  //         text2: 'Erreur lors de l\'envoi des données. Veuillez réessayer plus tard.'
+  //       });
+
+  //       setLoading(false);
+  //       return;
+  //     }
+  //   }
+
+  //   setLoading(false);
+  //   setAllDataSent(true);
+  // };
 
   let text = 'Waiting..';
   if (errorMsg) {

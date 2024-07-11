@@ -10,6 +10,7 @@ import FeuilleDetail from '../src/Formulaires/FeuilleDetail';
 import SavedDataScreen from '../src/SavedDataScreen/SavedDataScreen';
 import QrCodeScanner from '../src/Formulaires/QrCodeScanner';
 import home from '../src/HomePage/home';
+import ProjectSelectionPage from '../src/HomePage/selectedProjet';
 
 const Stack = createStackNavigator();
 
@@ -63,6 +64,11 @@ const Routes = () => {
           component={HomePage} 
           options={{ title: 'Classeur' }} 
           // options={{ headerShown: false }}
+        />
+        <Stack.Screen
+        name="ProjectSelectionPage"
+        component={ProjectSelectionPage}
+        options={{title: 'Projet'}}
         />
         <Stack.Screen 
           name="ClasseurDetails" 

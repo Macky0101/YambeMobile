@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState,useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Image, TouchableWithoutFeedback, Keyboard, ScrollView, ActivityIndicator, Modal, Alert,ProgressBarAndroid } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import * as Animatable from 'react-native-animatable';
@@ -22,8 +22,13 @@ const LoginPage = () => {
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [linkLoading, setLinkLoading] = useState(false); 
+  const [isLinkValid, setIsLinkValid] = useState(false);
     const [progress, setProgress] = useState(0);
 
+    useEffect(() => {
+      // Vérifie si l'URL est valide à chaque changement de 'link'
+      setIsLinkValid(isValidURL(link));
+    }, [link]);
 
   const loginSubmit = async () => {
     try {
@@ -36,7 +41,7 @@ const LoginPage = () => {
       await AsyncStorage.setItem('clp_structure', user.clp_structure);
 
       setLoading(false);
-      navigation.replace('home'); 
+      navigation.replace('ProjectSelectionPage'); 
     } catch (error) {
       console.error('Erreur lors de la connexion:', error);
       setLoading(false);
@@ -53,22 +58,30 @@ const LoginPage = () => {
       return;
     }
 
+    if (link.endsWith('/')) {
+      Alert.alert('Lien incorrect', 'Veuillez retirer la barre oblique (/) à la fin de l\'URL.');
+      return;
+    }
+  
     setLinkLoading(true);
     try {
       const response = await fetch(link);
       if (response.ok) {
         setModalVisible(false);
-        navigation.navigate('LoginPage', { link });
+        // Enregistrer l'URL personnalisée dans AsyncStorage
+        await AsyncStorage.setItem('custom_baseURL', link);
+        // Redémarrer l'application ou actualiser pour utiliser la nouvelle URL
       } else {
         Alert.alert('Lien invalide', 'Veuillez entrer un lien valide.');
       }
     } catch (error) {
-      console.error('Erreur lors de la vérification du lien:', error);
+      console.error('Erreur lors de la vérification du lien :', error);
       Alert.alert('Erreur', 'Une erreur est survenue lors de la vérification du lien.');
     } finally {
       setLinkLoading(false);
     }
   };
+  
 
   return (
     <View style={styles.container}>
@@ -105,19 +118,47 @@ const LoginPage = () => {
           </View>
   
           <View style={styles.buttonContainer}>
-            <TouchableOpacity style={styles.button} onPress={loginSubmit}>
-              <Text style={styles.buttonText}>{loading ? 'Connexion en cours...' : 'connexion'}</Text>
-            </TouchableOpacity>
-          </View>
+              <TouchableOpacity style={[styles.button, !isLinkValid && styles.disabledButton]} onPress={loginSubmit} disabled={!isLinkValid || loading}>
+                <Text style={styles.buttonText}>{loading ? 'Connexion en cours...' : 'connexion'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.linkButton} onPress={() => setModalVisible(true)}>
+                <Icon name="link" size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
   
           {loading && (
-            <View style={[modalStyles.activityIndicatorWrapper, { position: 'absolute', bottom: 20, alignSelf: 'center' }]}>
+            <View style={[ { position: 'absolute', bottom: 20, alignSelf: 'center' }]}>
               <Text style={{ color: '#000000', textAlign:'center' }}>Chargement... {Math.round(progress)}%</Text>
             </View>
           )}
   
           {errorMessage ? <Text style={styles.errorMessage}>{errorMessage}</Text> : null}
   
+          <Modal animationType="slide" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(!modalVisible)}>
+            <View style={styles.modalContainer}>
+              <View style={styles.modalView}>
+                <Text style={styles.modalTitle}>Votre lien</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Entre URL"
+                  value={link}
+                  onChangeText={setLink}
+                />
+                <View style={styles.modalButtonContainer}>
+                  <TouchableOpacity style={[styles.button, styles.modalButton]} onPress={checkLinkAndNavigate}>
+                    {linkLoading ? (
+                      <ActivityIndicator color="white" size="small" />
+                    ) : (
+                      <Text style={styles.buttonTextModal}>Verifie</Text>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.button, styles.modalButton]} onPress={() => setModalVisible(!modalVisible)}>
+                    <Text style={styles.buttonTextModal}>fermer</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
           <Modal
             transparent={true}
             animationType="none"
@@ -149,15 +190,7 @@ const modalStyles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.5)'
   },
-  activityIndicatorWrapper: {
-    // backgroundColor: '#FFFFFF',
-    // height: 100,
-    // width: 100,
-    // borderRadius: 10,
-    // display: 'flex',
-    // alignItems: 'center',
-    // justifyContent: 'center'
-  }
+
 });
 export default LoginPage;
 

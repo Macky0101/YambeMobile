@@ -1,35 +1,52 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Image, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, ActivityIndicator, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ListClasseur } from '../../Services/AuthServices';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
+import ProjectModal from './ProjectModal';
+import axios from 'axios';
+import styles from './stylehome';
 
 const Home = () => {
   const [classeurs, setClasseurs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userInfo, setUserInfo] = useState({ clp_nom: '', clp_prenom: '' });
+  const [projectInfo, setProjectInfo] = useState({});
+  const [feuilles, setFeuilles] = useState([]);
+  const [isModalVisible, setModalVisible] = useState(false);
   const navigation = useNavigation();
 
   useEffect(() => {
     fetchData();
     getUserInfo();
+    getProjectInfo();
+    // fetchFeuilles();
   }, []);
 
   const fetchData = async () => {
     try {
       const clp_structure = await AsyncStorage.getItem('clp_structure');
-      if (!clp_structure) {
-        throw new Error('clp_structure non trouvé dans AsyncStorage');
+      const project = await AsyncStorage.getItem('selectedProject');
+  
+      if (!clp_structure || !project) {
+        throw new Error('clp_structure ou projet non trouvé dans AsyncStorage');
       }
-      const data = await ListClasseur(clp_structure);
-
+  
+      const projectData = JSON.parse(project);
+      const data = await ListClasseur(clp_structure, projectData.code_projet);
+      console.log('code projet', projectData.code_projet);
+  
       if (data && data.classeur) {
-        console.log('Données des classeurs reçues:', data.classeur);
+        // console.log('Données des classeurs reçues:', data.classeur);
         setClasseurs(data.classeur);
+        await AsyncStorage.setItem('classeurs', JSON.stringify(data.classeur));
       } else {
         console.log('Pas de classeurs dans les données reçues.');
       }
+  
+      // Stocker le code projet dans un état
+      setProjectInfo(projectData);
     } catch (error) {
       console.error('Erreur lors de la récupération des classeurs:', error);
     } finally {
@@ -37,10 +54,64 @@ const Home = () => {
     }
   };
 
+ 
+  // const fetchFeuilles = async () => {
+  //   try {
+  //     const response = await axios.get('https://demo-swedd.org/api/all_feuille.php?Partenaire=8&Projet=2000001616');
+  //     const { feuille } = response.data;
+  //     const feuilleWithLocalData = [];
+  
+  //     for (let i = 0; i < feuille.length; i++) {
+  //       const item = feuille[i];
+  //       const localDataKey = `feuille_${item.Code_Feuille}`;
+  //       const localData = await AsyncStorage.getItem(localDataKey);
+  
+  //       console.log(`Local data for ${localDataKey}:`, localData);
+  
+  //       if (localData !== null && localData !== '') {
+  //         try {
+  //           const parsedLocalData = JSON.parse(localData);
+  //           if (Array.isArray(parsedLocalData) && parsedLocalData.length > 0) {
+  //             feuilleWithLocalData.push(item);
+  //           }
+  //         } catch (parseError) {
+  //           console.error(`Erreur de parsing des données locales pour feuille ${item.Code_Feuille}:`, parseError);
+  //         }
+  //       }
+  //     }
+  
+  //     console.log('Feuilles avec données locales :', feuilleWithLocalData);
+  //     setFeuilles(feuilleWithLocalData);
+  //   } catch (error) {
+  //     console.error('Erreur lors de la récupération des feuilles de classeur:', error);
+  //   }
+  // };
+  
+  
+  
+  
+  
+  
+  
+  
+
   const getUserInfo = async () => {
     const clp_nom = await AsyncStorage.getItem('clp_nom');
     const clp_prenom = await AsyncStorage.getItem('clp_prenom');
     setUserInfo({ clp_nom, clp_prenom });
+  };
+
+  const getProjectInfo = async () => {
+    const project = await AsyncStorage.getItem('selectedProject');
+    if (project) {
+      setProjectInfo(JSON.parse(project));
+    }
+  };
+  const handleProjectSelect = async (project) => {
+    await AsyncStorage.setItem('selectedProject', JSON.stringify(project));
+    setProjectInfo(project);
+    setModalVisible(false);
+    fetchData();
   };
 
   const calculateGlobalStats = () => {
@@ -63,6 +134,7 @@ const Home = () => {
     const localData = await AsyncStorage.getItem('localData');
     return localData !== null;
   };
+
 
   const handleLogout = async () => {
     Alert.alert(
@@ -103,10 +175,22 @@ const Home = () => {
   return (
     <View style={styles.container}>
       <View style={styles.greetingContainer}>
-        <Text style={styles.greeting}>Bonjour : {userInfo.clp_nom} {userInfo.clp_prenom}</Text>
+        <Text style={styles.greeting}>
+          {userInfo.clp_nom} {userInfo.clp_prenom}
+        </Text>
         <MaterialIcons name="logout" size={24} color="black" style={styles.logoutIcon} onPress={handleLogout} />
       </View>
-
+      <View style={styles.projectCard}>
+        <Text style={styles.projectSigle}>{projectInfo.sigle_projet}</Text>
+        <Text style={styles.projectName}>{projectInfo.intitule_projet}</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingTop: 5 }}>
+          <Text style={styles.projectDate}>Début: {projectInfo.date_debut}</Text>
+          <Text style={styles.projectDate}>Fin: {projectInfo.date_fin}</Text>
+        </View>
+      </View>
+      {/* <TouchableOpacity style={styles.button} onPress={() => setModalVisible(true)}>
+        <Text style={styles.buttonText}>Changer de projet</Text>
+      </TouchableOpacity> */}
       <View style={styles.walletContainer}>
         <View style={styles.contentContainer}>
           <View style={styles.contentTotals}>
@@ -120,157 +204,40 @@ const Home = () => {
           </View>
         </View>
       </View>
-      <TouchableOpacity style={styles.classeurContainer}  onPress={() => navigation.navigate('HomePage')}>
-        <Text style={styles.classeurTitle}>Liste des classeurs</Text>
-        <View style={styles.classeurContent}>
-          <Image source={require('../../assets/logo/classeur-image.png')} style={styles.classeurImage} />
-          <TouchableOpacity style={styles.arrowButton} onPress={() => navigation.navigate('HomePage')}>
-            <Text style={styles.arrowText}>→</Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-      <ScrollView>
-        {classeurs.map((classeur, index) => (
-          <TouchableOpacity key={index} style={styles.feuilleContainer}>
-            <View style={styles.iconContainer}>
-              <Text style={styles.icon}>📄</Text>
-            </View>
-            <View style={styles.feuilleContent}>
-              <Text style={styles.libelleFeuille}>{classeur['Libelle classeur']}</Text>
-              <Text style={styles.dateInsertion}>Date: {classeur['Date']}</Text>
-            </View>
-          </TouchableOpacity>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+        <TouchableOpacity style={styles.classeurContainer} onPress={() => setModalVisible(true)}>
+          <Text style={styles.classeurTitle}>Changer de projet</Text>
+          <View style={styles.classeurContent}>
+            <TouchableOpacity style={styles.arrowButton}>
+              <MaterialIcons name="work" size={32} color="black" style={styles.logoutIcon} />
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.classeurContainer} onPress={() => navigation.navigate('HomePage', { code_projet: projectInfo.code_projet })}>
+          <Text style={styles.classeurTitle}>Classeurs</Text>
+          <View style={styles.classeurContent}>
+            <TouchableOpacity style={styles.arrowButton}>
+              <MaterialIcons name="folder" size={32} color="black" style={styles.logoutIcon} />
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      {/* <ScrollView>
+        {feuilles.map((feuille, index) => (
+          <View key={index} style={styles.feuilleContainer}>
+            <Text style={styles.feuilleTitle}>{feuille.Nom_Feuille}</Text>
+            <Text style={styles.feuilleDescription}>{feuille.Libelle_Feuille}</Text>
+          </View>
         ))}
-      </ScrollView>
+      </ScrollView> */}
+      <ProjectModal
+        isVisible={isModalVisible}
+        onClose={() => setModalVisible(false)}
+        onSelect={handleProjectSelect}
+      />
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-    backgroundColor: '#FFF',
-  },
-  loadingContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  greetingContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-    marginTop: 50,
-  },
-  greeting: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  logoutIcon: {
-    marginLeft: 10, 
-  },
-  walletContainer: {
-    backgroundColor: '#009960',
-    padding: 20,
-    borderRadius: 8,
-    marginBottom: 16,
-    width: '100%',
-    maxWidth: 400,
-    alignSelf: 'center',
-  },
-  contentContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  contentTotals: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  walletText: {
-    color: '#FFF',
-    fontSize: 16,
-    marginBottom: 7,
-  },
-  walletAmount: {
-    color: '#FFF',
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  separator: {
-    width: 1,
-    height: '100%',
-    backgroundColor: '#FFF',
-    marginHorizontal: 20,
-  },
-  classeurContainer: {
-    backgroundColor: '#4A90E2',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  classeurTitle: {
-    color: '#FFF',
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  classeurContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  classeurImage: {
-    width: 100,
-    height: 100,
-  },
-  arrowButton: {
-    backgroundColor: '#FFF',
-    borderRadius: 20,
-    padding: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  arrowText: {
-    color: '#009960',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  feuilleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    borderRadius: 8,
-    backgroundColor: '#dddddd',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1,
-    elevation: 2,
-  },
-  iconContainer: {
-    backgroundColor: '#f0f0f0',
-    padding: 12,
-    borderRadius: 8,
-    marginRight: 12,
-  },
-  icon: {
-    fontSize: 24,
-  },
-  feuilleContent: {
-    flex: 1,
-    paddingVertical: 16,
-  },
-  libelleFeuille: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  dateInsertion: {
-    fontSize: 12,
-    color: '#666666',
-  },
-});
 
 export default Home;
